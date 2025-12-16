@@ -1,17 +1,23 @@
 # fullstack-demo .gitignore
 
-
 # Dependencies
 node_modules/
-__pycache__/
+frontend/node_modules/
+*/node_modules/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 
 # Virtual environments
 venv/
 env/
 ENV/
 .venv/
-
+.env
 
 # IDE
 .vscode/
