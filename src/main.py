@@ -1,12 +1,13 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from schemas.product import Product
-from sqlalchemy.orm import Session
 from data.database import engine, SessionLocal
-import data.database_models
+from data import database_models
+from routes.product_routes import router as product_router
+from services.product_service import ProductService
 
 # Creating the needed tables based on database_models
-data.database_models.Base.metadata.create_all(bind=engine)
+database_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
@@ -19,9 +20,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register routers
+app.include_router(product_router)
 
-# In-memory list
-products = [
+
+# Initial products data
+INITIAL_PRODUCTS = [
     Product(id=1, name='Pen', description='Stylish Pen', price=35, quantity=25),
     Product(id=2, name='Notebook', description='200-page ruled notebook', price=120, quantity=40),
     Product(id=3, name='Marker', description='Permanent black marker', price=50, quantity=30),
@@ -30,90 +34,14 @@ products = [
 ]
 
 
-def get_db():
+def init_db():
+    """Initialize database with default products"""
     db = SessionLocal()
     try:
-        yield db
+        ProductService.init_products(db, INITIAL_PRODUCTS)
     finally:
         db.close()
 
 
-def init_db():
-    db = SessionLocal()
-
-    product_count = db.query(data.database_models.Product).count()
-
-    if product_count == 0:
-        for product in products:
-            # Converting Pydantic object to a dict using .model_dump(),& ** used for unpacking
-            db.add(data.database_models.Product(**product.model_dump()))
-        db.commit()
-        print("Database initialized with products.")
-
-    db.close()
-
-
+# Initialize database on startup
 init_db()
-
-
-# GET- Fetch all products
-@app.get("/products")
-def get_all_products(db: Session = Depends(get_db)):
-    db_products = db.query(data.database_models.Product).all()
-    return db_products
-
-
-# GET- Fetch a product by id
-@app.get("/products/{id}")
-def get_product_by_id(id: int, db: Session = Depends(get_db)):
-    db_product = db.query(data.database_models.Product).filter(
-        data.database_models.Product.id == id
-    ).first()
-
-    if db_product:
-        return db_product
-    
-    return {"error": "Product not found"}
-
-
-# POST- Add a new product
-@app.post("/products")
-def add_product(product: Product, db: Session = Depends(get_db)):
-    db.add(data.database_models.Product(**product.model_dump()))
-    db.commit()
-    return {"message": "Product created successfully", "product": product}
-
-
-# PUT- Update an existing product
-@app.put("/products/{id}")
-def update_product(id: int, product: Product, db: Session = Depends(get_db)):
-    db_product = db.query(data.database_models.Product).filter(
-        data.database_models.Product.id == id
-    ).first()
-
-    if not db_product:
-        raise HTTPException(status_code=404, detail="Product not found")
-
-    db_product.name = product.name
-    db_product.description = product.description
-    db_product.price = product.price
-    db_product.quantity = product.quantity
-    
-    db.commit()
-    db.refresh(db_product)
-    return {"message": "Product updated successfully", "product": db_product}
-
-
-# DELETE - Delete a product
-@app.delete("/products/{id}")
-def delete_product(id: int, db: Session = Depends(get_db)):
-    db_product = db.query(data.database_models.Product).filter(
-        data.database_models.Product.id == id
-    ).first()
-
-    if not db_product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    db.delete(db_product)
-    db.commit()
-    return {"message": "Product deleted successfully"}
